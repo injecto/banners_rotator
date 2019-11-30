@@ -1,0 +1,13 @@
+[package]
+name = "banners_rotator"
+version = "1.0.0"
+authors = ["Vladimir Glushenkov <injecto.wg@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "2.33.0"
+csv = "1.1"
+serde = { version = "1.0", features = ["derive"] }
+rand = "0.7.2"
