@@ -16,6 +16,7 @@ use std::fs::File;
 use std::net::SocketAddr;
 use storage::{Storage, InMemoryStorage};
 use std::sync::Arc;
+use url::Url;
 
 
 fn main() {
@@ -53,12 +54,15 @@ fn main() {
     let bind_addr: SocketAddr = ("0.0.0.0:".to_owned() + port).parse().expect("Illegal bind address");
     let banners = Arc::new(initializable_banners);
 
+    let base_url = Arc::new(Url::parse("http://localhost").unwrap());
+
     let service = move || {
         let storage = banners.clone();
+        let base = base_url.clone();
 
         service_fn_ok(move |req| {
             let uri = req.uri().to_string();
-            let url = url::Url::parse(&uri).unwrap();
+            let url = base.join(uri.as_str()).unwrap();
             let categories = url.query_pairs().filter_map(|(param, val)| {
                 if param.eq("category") {
                     Some(val.to_string())
@@ -67,9 +71,9 @@ fn main() {
                 }
             }).collect::<Vec<String>>();
 
-            let resp_body = storage.get_banner_html(categories)
-                .map_or_else(|| Body::empty(), |html| Body::from(html));
-            Response::new(resp_body)
+            storage.get_banner_html(categories)
+                .map_or_else(|| Response::builder().status(204).body(Body::empty()).unwrap(),
+                             |html| Response::new(Body::from(html)))
         })
     };
 
