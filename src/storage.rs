@@ -1,20 +1,21 @@
 use std::collections::{HashMap, HashSet};
-use rand::prelude::*;
 use std::error::Error;
 use serde::export::Formatter;
+use super::util::cumulative_weights::CumulativeWeights;
 
 type Category = String;
+type BannerIdx = usize;
 
 const HTML_PREFIX: &str = r#"<html><body><img src=""#;
 const HTML_SUFFIX: &str = r#""/></body></html>"#;
 
-trait Storage {
+pub trait Storage {
     fn add_banner(&mut self, url: String, shows_amount: u32, categories: Vec<Category>) -> Result<(), StoreError>;
     fn get_banner_html(&mut self, categories: Vec<Category>) -> Option<String>;
 }
 
 #[derive(Debug, PartialEq)]
-enum StoreError {
+pub enum StoreError {
     IllegalUrl,
     IllegalShowsAmount,
     EmptyCategories,
@@ -63,89 +64,21 @@ impl Banner {
     }
 }
 
-type BannerIdx = usize;
-
 #[derive(Debug)]
-struct InMemoryStorage {
+pub struct InMemoryStorage {
     banners: Vec<Banner>,
     index: HashMap<Category, Vec<BannerIdx>>,
     cumulative_weights: CumulativeWeights,
 }
 
-#[derive(Debug)]
-struct CumulativeWeights {
-    weights: Vec<u64>,
-    idx_projection: IdxProjection,
-}
-
-impl CumulativeWeights {
-    fn new() -> Self {
-        CumulativeWeights {
-            weights: Vec::new(),
-            idx_projection: IdxProjection::AsIs,
-        }
-    }
-
-    fn with_projection() -> Self {
-        CumulativeWeights {
-            weights: Vec::new(),
-            idx_projection: IdxProjection::Specific(Vec::new()),
-        }
-    }
-
-    fn add_weight(&mut self, weight: u32) {
-        let last_weight = self.weights.last().copied().unwrap_or(0);
-        self.weights.push(last_weight + weight as u64)
-    }
-
-    fn add_weight_for_idx(&mut self, weight: u32, idx: usize) {
-        match self.idx_projection {
-            IdxProjection::Specific(ref mut p) => {
-                p.push(idx);
-                self.add_weight(weight);
-            }
-            _ => panic!("Can't add projection")
-        }
-    }
-
-    fn select_uniformly(&self) -> Option<usize> {
-        if self.weights.is_empty() {
-            return None;
-        }
-
-        let idx = if self.weights.len() == 1 {
-            0
-        } else {
-            let max = self.weights.last().unwrap();
-            let rnd = thread_rng().gen_range(0u64, max + 1);
-
-            match self.weights.binary_search(&rnd) {
-                Ok(exact_idx) => exact_idx,
-                Err(insert_idx) => insert_idx,
-            }
-        };
-
-        Some(self.idx_projection.project(idx))
-    }
-}
-
-#[derive(Debug)]
-enum IdxProjection {
-    AsIs,
-    Specific(Vec<usize>),
-}
-
-impl IdxProjection {
-    fn project(&self, idx: usize) -> usize {
-        match self {
-            IdxProjection::AsIs => idx,
-            IdxProjection::Specific(p) => p[idx]
-        }
+impl std::fmt::Display for InMemoryStorage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "InMemoryStore[banners: {}, categories: {}]", self.banners.len(), self.index.len())
     }
 }
 
 impl InMemoryStorage {
-    fn new() -> Self {
+    pub fn new() -> Self {
         InMemoryStorage {
             banners: Vec::new(),
             index: HashMap::new(),

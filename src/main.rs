@@ -3,15 +3,17 @@ extern crate csv;
 extern crate rand;
 
 mod storage;
+mod util;
 
 use serde::Deserialize;
 use clap::{App, Arg};
 use std::fs::File;
+use storage::{Storage, InMemoryStorage};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct BannerRecord {
     url: String,
-    shows_amount: u64,
+    shows_amount: u32,
     categories: Vec<String>,
 }
 
@@ -35,8 +37,15 @@ fn main() {
         .has_headers(false)
         .from_reader(config_file);
 
+    let mut banners = InMemoryStorage::new();
+
     for record_result in reader.deserialize() {
         let record: BannerRecord = record_result.expect("CSV deserialization error");
-        println!("{:?}", record);
+        let record_dup = record.clone();
+        if let Err(e) = banners.add_banner(record.url, record.shows_amount, record.categories) {
+            eprintln!("Banners {:?} isn't added: {}", record_dup, e);
+        }
     }
+
+    println!("{} loaded", &banners);
 }
