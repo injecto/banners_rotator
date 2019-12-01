@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use serde::export::Formatter;
 use super::util::cumulative_weights::CumulativeWeights;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 type Category = String;
 type BannerIdx = usize;
@@ -11,7 +13,7 @@ const HTML_SUFFIX: &str = r#""/></body></html>"#;
 
 pub trait Storage {
     fn add_banner(&mut self, url: String, shows_amount: u32, categories: Vec<Category>) -> Result<(), StoreError>;
-    fn get_banner_html(&mut self, categories: Vec<Category>) -> Option<String>;
+    fn get_banner_html(&self, categories: Vec<Category>) -> Option<String>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -38,7 +40,7 @@ impl std::fmt::Display for StoreError {
 struct Banner {
     url: String,
     shows_amount: u32,
-    shows_left: u32,
+    shows_left: Arc<AtomicU32>,
 }
 
 impl Banner {
@@ -46,21 +48,28 @@ impl Banner {
         Banner {
             url,
             shows_amount,
-            shows_left: shows_amount,
+            shows_left: Arc::new(AtomicU32::new(shows_amount)),
         }
     }
 
-    fn show_html(&mut self) -> Option<String> {
-        if !self.can_show() {
-            return None;
+    fn show_html(&self) -> Option<String> {
+        let shows_left= &self.shows_left.clone();
+        let mut left = shows_left.load(Ordering::SeqCst);
+
+        while left > 0 && shows_left.compare_and_swap(left, left - 1, Ordering::SeqCst) != left {
+            left = shows_left.load(Ordering::SeqCst);
         }
 
-        self.shows_left -= 1;
-        Some(format!("{}{}{}", HTML_PREFIX, self.url, HTML_SUFFIX))
+        if left == 0 {
+            return None
+        } else {
+            Some(format!("{}{}{}", HTML_PREFIX, self.url, HTML_SUFFIX))
+        }
     }
 
     fn can_show(&self) -> bool {
-        self.shows_left > 0
+        let shows_left = &self.shows_left.clone();
+        shows_left.load(Ordering::SeqCst) > 0
     }
 }
 
@@ -116,7 +125,7 @@ impl Storage for InMemoryStorage {
         Ok(())
     }
 
-    fn get_banner_html(&mut self, categories: Vec<Category>) -> Option<String> {
+    fn get_banner_html(&self, categories: Vec<Category>) -> Option<String> {
         match self.filter_by_categories(categories) {
             FilterResult::All => {
                 self.show_html_select_all()
@@ -157,15 +166,15 @@ impl InMemoryStorage {
         weights
     }
 
-    fn show_html(&mut self, weights: &CumulativeWeights) -> Option<String> {
+    fn show_html(&self, weights: &CumulativeWeights) -> Option<String> {
         weights.select_uniformly()
-            .and_then(|idx| self.banners.get_mut(idx))
+            .and_then(|idx| self.banners.get(idx))
             .and_then(|banner| banner.show_html())
     }
 
-    fn show_html_select_all(&mut self) -> Option<String> {
+    fn show_html_select_all(&self) -> Option<String> {
         self.cumulative_weights.select_uniformly()
-            .and_then(|idx| self.banners.get_mut(idx))
+            .and_then(|idx| self.banners.get(idx))
             .and_then(|banner| banner.show_html())
     }
 }
@@ -177,7 +186,7 @@ mod tests {
     #[test]
     fn empty_storage() {
         // arrange
-        let mut storage = InMemoryStorage::new();
+        let storage = InMemoryStorage::new();
 
         // act
         let html = storage.get_banner_html(vec![]);
