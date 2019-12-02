@@ -11,7 +11,7 @@ use serde::Deserialize;
 use clap::{App, Arg};
 use hyper::{Body, Response, Server};
 use hyper::rt::Future;
-use hyper::service::{service_fn_ok};
+use hyper::service::service_fn_ok;
 use std::fs::File;
 use std::net::SocketAddr;
 use storage::{Storage, InMemoryStorage};
@@ -54,15 +54,13 @@ fn main() {
     let bind_addr: SocketAddr = ("0.0.0.0:".to_owned() + port).parse().expect("Illegal bind address");
     let banners = Arc::new(initializable_banners);
 
-    let base_url = Arc::new(Url::parse("http://localhost").unwrap());
-
     let service = move || {
         let storage = banners.clone();
-        let base = base_url.clone();
 
         service_fn_ok(move |req| {
             let uri = req.uri().to_string();
-            let url = base.join(uri.as_str()).unwrap();
+            let base_url = Url::parse(BASE_URL).unwrap();
+            let url = base_url.join(uri.as_str()).unwrap();
             let categories = url.query_pairs().filter_map(|(param, val)| {
                 if param.eq("category") {
                     Some(val.to_string())
@@ -83,7 +81,6 @@ fn main() {
 
     println!("Start listening on {}", &bind_addr);
     hyper::rt::run(server);
-
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -92,3 +89,5 @@ struct BannerRecord {
     shows_amount: u32,
     categories: Vec<String>,
 }
+
+const BASE_URL: &str = "http://localhost";

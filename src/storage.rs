@@ -77,7 +77,7 @@ impl Banner {
 pub struct InMemoryStorage {
     banners: Vec<Banner>,
     index: HashMap<Category, Vec<BannerIdx>>,
-    cumulative_weights: CumulativeWeights,
+    cumulative_weights: CumulativeWeights, // weight for banners vector used to weighted selection
 }
 
 impl std::fmt::Display for InMemoryStorage {

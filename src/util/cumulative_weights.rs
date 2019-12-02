@@ -6,9 +6,13 @@ pub struct CumulativeWeights {
     idx_projection: IdxProjection,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum IdxProjection {
     AsIs,
+
+    ///
+    /// vec index mapped to vec[index] value
+    ///
     Specific(Vec<usize>),
 }
 
@@ -28,6 +32,9 @@ impl CumulativeWeights {
     }
 
     pub(crate) fn add_weight(&mut self, weight: u32) {
+        if self.idx_projection != IdxProjection::AsIs {
+            panic!("Can't add weight without index projetion")
+        }
         let last_weight = self.weights.last().copied().unwrap_or(0);
         self.weights.push(last_weight + weight as u64)
     }
